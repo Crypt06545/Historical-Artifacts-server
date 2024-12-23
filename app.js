@@ -55,6 +55,25 @@ async function run() {
       res.json(artifactDetails);
     });
 
+    app.get("/my-add-artifact/:email", async (req, res) => {
+      const email = req.params.email;
+      // console.log("Fetching artifacts for email:", email);
+      try {
+        const result = await aftifactCollection
+          .find({ userInfo: email })
+          .toArray();
+        if (result.length > 0) {
+          res.json(result);
+        } else {
+          res
+            .status(404)
+            .json({ message: "No artifacts found for this email" });
+        }
+      } catch (err) {
+        console.error("Error fetching data:", err);
+        res.status(500).json({ message: "Server error" });
+      }
+    });
 
     // app.get("/latestvisas", async (req, res) => {
     //   const latestvisas = usersCollection.find().limit(6);
@@ -65,12 +84,6 @@ async function run() {
     // app.get("/myvisas/:email", async (req, res) => {
     //   const email = req.params.email;
     //   const result = await applyVisaCollection.find({ email }).toArray();
-    //   res.json(result);
-    // });
-
-    // app.get("/addedvisas/:email", async (req, res) => {
-    //   const email = req.params.email;
-    //   const result = await usersCollection.find({ email }).toArray();
     //   res.json(result);
     // });
 
@@ -103,27 +116,27 @@ async function run() {
     //   res.send(result);
     // });
 
-    // // PATCH request
-    // app.patch("/updatevisa/:id", async (req, res) => {
-    //   const id = req.params.id;
-    //   const data = req.body;
-    //   const query = { _id: new ObjectId(id) };
-    //   const update = {
-    //     $set: {
-    //       countryImage: data?.countryImage,
-    //       countryName: data?.countryName,
-    //       visaType: data?.visaType,
-    //       processingTime: data?.processingTime,
-    //       description: data?.description,
-    //       ageRestriction: data?.ageRestriction,
-    //       fee: data?.fee,
-    //       validity: data?.validity,
-    //       applicationMethod: data?.applicationMethod,
-    //     },
-    //   };
-    //   const result = await usersCollection.updateOne(query, update);
-    //   res.send(result);
-    // });
+    // PATCH request
+    app.patch("/update-artifact/:id", async (req, res) => {
+      const id = req.params.id;
+      const data = req.body;
+      // console.log({ id, data });
+      const query = { _id: new ObjectId(id) };
+      const update = {
+        $set: {
+          artifactName: data?.artifactName,
+          artifactImage: data?.artifactImage,
+          artifactType: data?.artifactType,
+          historicalContext: data?.historicalContext,
+          createdAt: data?.createdAt,
+          discoveredAt: data?.discoveredAt,
+          discoveredBy: data?.discoveredBy,
+          presentLocation: data?.presentLocation,
+        },
+      };
+      const result = await aftifactCollection.updateOne(query, update);
+      res.send(result);
+    });
 
     await client.db("admin").command({ ping: 1 });
     console.log(
