@@ -31,7 +31,7 @@ async function run() {
 
     // db collections
     const aftifactCollection = database.collection("NewArtifact");
-    // const applyVisaCollection = database.collection("ApplyVisa");
+    const likedArtifactsCollection = database.collection("LikedArtifact");
 
     // GET requests
 
@@ -101,13 +101,13 @@ async function run() {
       res.send(result);
     });
 
-    // // DELETE requests
-    // app.delete("/rmyapplication/:id", async (req, res) => {
-    //   const id = req.params.id;
-    //   const query = { _id: new ObjectId(id) };
-    //   const result = await applyVisaCollection.deleteOne(query);
-    //   res.send(result);
-    // });
+    // DELETE requests
+    app.delete("/rm-my-artifact/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await aftifactCollection.deleteOne(query);
+      res.send(result);
+    });
 
     // app.delete("/addedvisadelete/:id", async (req, res) => {
     //   const id = req.params.id;
@@ -137,6 +137,33 @@ async function run() {
       const result = await aftifactCollection.updateOne(query, update);
       res.send(result);
     });
+
+    app.patch("/update-artifact-like/:id", async (req, res) => {
+      const id = req.params.id;
+      const data = req.body;
+
+      // Find the artifact in the collection
+      const query = { _id: new ObjectId(id) };
+
+      // Determine whether to increment or decrement the like count
+      const update = {
+        $inc: { react: data.isLiked ? 1 : -1 }, // Increment or decrement based on isLiked value
+      };
+
+      try {
+        const result = await aftifactCollection.updateOne(query, update);
+
+        if (result.matchedCount > 0) {
+          res.status(200).send({ message: "Like count updated successfully" });
+        } else {
+          res.status(404).send({ message: "Artifact not found" });
+        }
+      } catch (error) {
+        res.status(500).send({ message: "Failed to update like count", error });
+      }
+    });
+
+    
 
     await client.db("admin").command({ ping: 1 });
     console.log(
