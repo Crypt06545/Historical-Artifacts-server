@@ -139,31 +139,46 @@ async function run() {
     });
 
     app.patch("/update-artifact-like/:id", async (req, res) => {
-      const id = req.params.id;
-      const data = req.body;
+  const id = req.params.id;
+  const data = req.body;
 
-      // Find the artifact in the collection
-      const query = { _id: new ObjectId(id) };
+  // Find the artifact in the collection
+  const query = { _id: new ObjectId(id) };
 
-      // Determine whether to increment or decrement the like count
-      const update = {
-        $inc: { react: data.isLiked ? 1 : -1 }, // Increment or decrement based on isLiked value
-      };
+  // Determine whether to increment or decrement the like count
+  const update = {
+    $inc: { react: data.isLiked ? 1 : -1 }, // Increment or decrement based on isLiked value
+  };
 
-      try {
-        const result = await aftifactCollection.updateOne(query, update);
+  try {
+    // Update the artifact's like count
+    const result = await aftifactCollection.updateOne(query, update);
 
-        if (result.matchedCount > 0) {
-          res.status(200).send({ message: "Like count updated successfully" });
-        } else {
-          res.status(404).send({ message: "Artifact not found" });
-        }
-      } catch (error) {
-        res.status(500).send({ message: "Failed to update like count", error });
+    // If the artifact was found and updated, proceed
+    if (result.matchedCount > 0) {
+      if (data.isLiked) {
+        // If the user liked the artifact, add it to likedArtifactsCollection
+        await likedArtifactsCollection.insertOne({
+          artifactId: new ObjectId(id),
+        });
+        res.status(200).send({ message: "Artifact liked and added to liked collection" });
+      } else {
+        // If the user unliked the artifact, remove it from likedArtifactsCollection
+        await likedArtifactsCollection.deleteOne({
+          artifactId: new ObjectId(id),
+        });
+        res.status(200).send({ message: "Artifact unliked and removed from liked collection" });
       }
-    });
+    } else {
+      res.status(404).send({ message: "Artifact not found" });
+    }
+  } catch (error) {
+    res.status(500).send({ message: "Failed to update like count", error });
+  }
+});
 
-    
+
+
 
     await client.db("admin").command({ ping: 1 });
     console.log(
