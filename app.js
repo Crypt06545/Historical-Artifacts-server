@@ -32,6 +32,7 @@ async function run() {
     // db collections
     const aftifactCollection = database.collection("NewArtifact");
     const likedArtifactsCollection = database.collection("LikedArtifact");
+    const CommentArtifact = database.collection("Comments");
 
     // GET requests
 
@@ -75,24 +76,73 @@ async function run() {
       }
     });
 
-    // app.get("/latestvisas", async (req, res) => {
-    //   const latestvisas = usersCollection.find().limit(6);
-    //   const result = await latestvisas.toArray();
-    //   res.json(result);
-    // });
+    app.get("/featured-artifacts", async (req, res) => {
+      const featuredArtifacts = aftifactCollection.find().limit(6);
+      const result = await featuredArtifacts.toArray();
+      res.json(result);
+    });
 
-    // app.get("/myvisas/:email", async (req, res) => {
-    //   const email = req.params.email;
-    //   const result = await applyVisaCollection.find({ email }).toArray();
-    //   res.json(result);
-    // });
+    app.get("/comments/:artifactId", async (req, res) => {
+      const artifactId = req.params.artifactId;
 
-    // // POST requests
-    // app.post("/applyvisa", async (req, res) => {
-    //   const applyVisa = req.body;
-    //   const result = await applyVisaCollection.insertOne(applyVisa);
-    //   res.send(result);
-    // });
+      try {
+        const artifact = await CommentArtifact.findOne({ artifactId });
+
+        if (!artifact) {
+          return res.status(200).json({ artifactId, comments: [] });
+        }
+
+        // If artifact found, return the full artifact with comments
+        return res.status(200).json(artifact);
+      } catch (error) {
+        console.error("Error fetching artifact:", error);
+        return res.status(200).json({ artifactId, comments: [] });
+      }
+    });
+
+
+
+    app.post("/comments/:id", async (req, res) => {
+      const id = req.params.id;
+      const newComment = req.body;
+
+      try {
+        // Check if the artifact exists
+        const existingArtifact = await CommentArtifact.findOne({
+          artifactId: id,
+        });
+
+        if (existingArtifact) {
+          // If artifact exists, push the new comment to the existing comments array
+          const result = await CommentArtifact.updateOne(
+            { artifactId: id },
+            {
+              $push: { comments: newComment },
+            }
+          );
+
+          return res.status(200).json({
+            message: "Comment added successfully to the existing artifact",
+          });
+        } else {
+          // If artifact doesn't exist, create a new artifact with the first comment
+          const newArtifact = {
+            artifactId: id,
+            comments: [newComment],
+          };
+          const result = await CommentArtifact.insertOne(newArtifact);
+          return res.status(201).json({
+            message: "New artifact created with the first comment",
+            result,
+          });
+        }
+      } catch (error) {
+        console.error("Error adding comment:", error);
+        return res
+          .status(500)
+          .json({ message: "Internal Server Error", error });
+      }
+    });
 
     app.post("/add-artifact", async (req, res) => {
       const NewArtifact = req.body;
@@ -108,13 +158,6 @@ async function run() {
       const result = await aftifactCollection.deleteOne(query);
       res.send(result);
     });
-
-    // app.delete("/addedvisadelete/:id", async (req, res) => {
-    //   const id = req.params.id;
-    //   const query = { _id: new ObjectId(id) };
-    //   const result = await usersCollection.deleteOne(query);
-    //   res.send(result);
-    // });
 
     // PATCH request
     app.patch("/update-artifact/:id", async (req, res) => {
@@ -139,46 +182,43 @@ async function run() {
     });
 
     app.patch("/update-artifact-like/:id", async (req, res) => {
-  const id = req.params.id;
-  const data = req.body;
+      const id = req.params.id;
+      const data = req.body;
 
-  // Find the artifact in the collection
-  const query = { _id: new ObjectId(id) };
+      // Find the artifact in the collection
+      const query = { _id: new ObjectId(id) };
+      const update = {
+        $inc: { react: data.isLiked ? 1 : -1 },
+      };
 
-  // Determine whether to increment or decrement the like count
-  const update = {
-    $inc: { react: data.isLiked ? 1 : -1 }, // Increment or decrement based on isLiked value
-  };
+      try {
+        // Update the artifact's like count
+        const result = await aftifactCollection.updateOne(query, update);
 
-  try {
-    // Update the artifact's like count
-    const result = await aftifactCollection.updateOne(query, update);
-
-    // If the artifact was found and updated, proceed
-    if (result.matchedCount > 0) {
-      if (data.isLiked) {
-        // If the user liked the artifact, add it to likedArtifactsCollection
-        await likedArtifactsCollection.insertOne({
-          artifactId: new ObjectId(id),
-        });
-        res.status(200).send({ message: "Artifact liked and added to liked collection" });
-      } else {
-        // If the user unliked the artifact, remove it from likedArtifactsCollection
-        await likedArtifactsCollection.deleteOne({
-          artifactId: new ObjectId(id),
-        });
-        res.status(200).send({ message: "Artifact unliked and removed from liked collection" });
+        // If the artifact was found and updated, proceed
+        if (result.matchedCount > 0) {
+          if (data.isLiked) {
+            await likedArtifactsCollection.insertOne({
+              artifactId: new ObjectId(id),
+            });
+            res.status(200).send({
+              message: "Artifact liked and added to liked collection",
+            });
+          } else {
+            await likedArtifactsCollection.deleteOne({
+              artifactId: new ObjectId(id),
+            });
+            res.status(200).send({
+              message: "Artifact unliked and removed from liked collection",
+            });
+          }
+        } else {
+          res.status(404).send({ message: "Artifact not found" });
+        }
+      } catch (error) {
+        res.status(500).send({ message: "Failed to update like count", error });
       }
-    } else {
-      res.status(404).send({ message: "Artifact not found" });
-    }
-  } catch (error) {
-    res.status(500).send({ message: "Failed to update like count", error });
-  }
-});
-
-
-
+    });
 
     await client.db("admin").command({ ping: 1 });
     console.log(
