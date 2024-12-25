@@ -2,15 +2,23 @@ import { MongoClient, ServerApiVersion, ObjectId } from "mongodb";
 import dotenv from "dotenv";
 import express from "express";
 import cors from "cors";
-
+import jwt from "jsonwebtoken";
+import cookieParser from "cookie-parser";
 dotenv.config(); // Load environment variables
 
 const app = express();
 const port = process.env.PORT || 3000;
 
+const corsOptions = {
+  origin: ["http://localhost:5173"],
+  credentials: true,
+  optionalSuccessStatus: 200,
+};
+
 // middlewares
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(express.json());
+app.use(cookieParser());
 
 const uri = `mongodb+srv://${process.env.MONGO_USERNAME}:${process.env.MONGO_PASSWORD}@bot.jxczvgl.mongodb.net/?retryWrites=true&w=majority&appName=bot`;
 
@@ -21,6 +29,22 @@ const client = new MongoClient(uri, {
     deprecationErrors: true,
   },
 });
+
+// verifyToken
+const verifyToken = (req, res, next) => {
+  const token = req.cookies?.token;
+  // console.log(token);
+
+  if (!token) return res.status(401).send({ message: "unauthorized access" });
+  jwt.verify(token, process.env.SECRET_KEY, (err, decoded) => {
+    if (err) {
+      return res.status(401).send({ message: "unauthorized access" });
+    }
+    req.user = decoded;
+  });
+
+  next();
+};
 
 async function run() {
   try {
@@ -35,6 +59,35 @@ async function run() {
     const LikedArtifact = database.collection("LikedArtifact");
 
     // GET requests
+
+    // generate jwt
+    app.post("/jwt", async (req, res) => {
+      const email = req.body;
+      // create token
+      const token = jwt.sign(email, process.env.SECRET_KEY, {
+        expiresIn: "30d",
+      });
+      // console.log(token);
+      // res.send(token)
+      res
+        .cookie("token", token, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
+        })
+        .send({ success: true });
+    });
+
+    // logout || clear cookie from browser
+    app.get("/logout", async (req, res) => {
+      res
+        .clearCookie("token", {
+          maxAge: 0,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
+        })
+        .send({ success: true });
+    });
 
     // Hello route
     app.get("/", (req, res) => {
@@ -67,7 +120,7 @@ async function run() {
       }
     });
 
-    app.get("/view-artifact-details/:id", async (req, res) => {
+    app.get("/view-artifact-details/:id", verifyToken, async (req, res) => {
       const id = req.params.id;
       // console.log(id);
       const artifactDetails = await aftifactCollection.findOne({
@@ -76,7 +129,7 @@ async function run() {
       res.json(artifactDetails);
     });
 
-    app.get("/my-add-artifact/:email", async (req, res) => {
+    app.get("/my-add-artifact/:email", verifyToken, async (req, res) => {
       const email = req.params.email;
       try {
         const result = await aftifactCollection
@@ -119,7 +172,7 @@ async function run() {
       }
     });
 
-    app.get("/liked-artifacts/:email", async (req, res) => {
+    app.get("/liked-artifacts/:email", verifyToken, async (req, res) => {
       const userEmail = req.params.email;
 
       try {
@@ -130,7 +183,7 @@ async function run() {
           // Send the artifactId of the matched documents
           const artifactIds = result.map((item) => item.artifactId);
           // res.json({ artifactIds });
-          res.send({artifactIds});
+          res.send({ artifactIds });
         } else {
           res
             .status(404)
@@ -142,6 +195,9 @@ async function run() {
       }
     });
 
+    // POST req
+
+    app.post("/jwt", async (req, res) => {});
     app.post("/comments/:id", async (req, res) => {
       const id = req.params.id;
       const newComment = req.body;
@@ -184,7 +240,7 @@ async function run() {
       }
     });
 
-    app.post("/add-artifact", async (req, res) => {
+    app.post("/add-artifact", verifyToken, async (req, res) => {
       const NewArtifact = req.body;
       // console.log(NewArtifact);
       const result = await aftifactCollection.insertOne(NewArtifact);
@@ -192,7 +248,7 @@ async function run() {
     });
 
     // DELETE requests
-    app.delete("/rm-my-artifact/:id", async (req, res) => {
+    app.delete("/rm-my-artifact/:id", verifyToken, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await aftifactCollection.deleteOne(query);
@@ -200,7 +256,7 @@ async function run() {
     });
 
     // PATCH request
-    app.patch("/update-artifact/:id", async (req, res) => {
+    app.patch("/update-artifact/:id", verifyToken, async (req, res) => {
       const id = req.params.id;
       const data = req.body;
       // console.log({ id, data });
