@@ -46,6 +46,23 @@ async function run() {
       const result = await allArtifacts.toArray();
       res.json(result);
     });
+    
+    app.get("/search-artifacts", async (req, res) => {
+      const { name } = req.query;
+    
+      try {
+        let query = {};
+        if (name) {
+          query = { artifactName: { $regex: name, $options: "i" } };
+        }
+    
+        const filteredArtifacts = await aftifactCollection.find(query).toArray();
+        res.json(filteredArtifacts);
+      } catch (err) {
+        res.status(500).json({ message: "Error fetching artifacts", error: err });
+      }
+    });
+    
 
     app.get("/view-artifact-details/:id", async (req, res) => {
       const id = req.params.id;
