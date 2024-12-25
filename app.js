@@ -46,23 +46,26 @@ async function run() {
       const result = await allArtifacts.toArray();
       res.json(result);
     });
-    
+
     app.get("/search-artifacts", async (req, res) => {
       const { name } = req.query;
-    
+
       try {
         let query = {};
         if (name) {
           query = { artifactName: { $regex: name, $options: "i" } };
         }
-    
-        const filteredArtifacts = await aftifactCollection.find(query).toArray();
+
+        const filteredArtifacts = await aftifactCollection
+          .find(query)
+          .toArray();
         res.json(filteredArtifacts);
       } catch (err) {
-        res.status(500).json({ message: "Error fetching artifacts", error: err });
+        res
+          .status(500)
+          .json({ message: "Error fetching artifacts", error: err });
       }
     });
-    
 
     app.get("/view-artifact-details/:id", async (req, res) => {
       const id = req.params.id;
@@ -117,7 +120,10 @@ async function run() {
       }
     });
 
-
+    app.get("/liked-artifacts/:email", async (req, res) => {
+      const userEmail = req.params.email;
+      console.log(userEmail);
+    });
 
     app.post("/comments/:id", async (req, res) => {
       const id = req.params.id;
@@ -199,41 +205,81 @@ async function run() {
     });
 
     app.patch("/update-artifact-like/:id", async (req, res) => {
-      const id = req.params.id;
-      const data = req.body;
-
-      // Find the artifact in the collection
-      const query = { _id: new ObjectId(id) };
-      const update = {
-        $inc: { react: data.isLiked ? 1 : -1 },
-      };
+      const { id } = req.params;
+      const { userEmail, liked } = req.body;
 
       try {
-        // Update the artifact's like count
-        const result = await aftifactCollection.updateOne(query, update);
-
-        // If the artifact was found and updated, proceed
-        if (result.matchedCount > 0) {
-          if (data.isLiked) {
-            await likedArtifactsCollection.insertOne({
-              artifactId: new ObjectId(id),
-            });
-            res.status(200).send({
-              message: "Artifact liked and added to liked collection",
-            });
-          } else {
-            await likedArtifactsCollection.deleteOne({
-              artifactId: new ObjectId(id),
-            });
-            res.status(200).send({
-              message: "Artifact unliked and removed from liked collection",
-            });
-          }
-        } else {
-          res.status(404).send({ message: "Artifact not found" });
+        // Validate the ID
+        if (!ObjectId.isValid(id)) {
+          return res
+            .status(400)
+            .json({ success: false, message: "Invalid ID" });
         }
-      } catch (error) {
-        res.status(500).send({ message: "Failed to update like count", error });
+
+        // Find the artifact
+        const artifact = await aftifactCollection.findOne({
+          _id: new ObjectId(id),
+        });
+
+        if (!artifact) {
+          return res
+            .status(404)
+            .json({ success: false, message: "Artifact not found" });
+        }
+
+        // Ensure liked_By is an array
+        if (!Array.isArray(artifact.liked_By)) {
+          artifact.liked_By = [];
+        }
+        let userLiked = false;
+
+        if (liked) {
+          const userIndex = artifact.liked_By.findIndex(
+            (user) => user.email === userEmail
+          );
+
+          if (userIndex === -1) {
+            artifact.liked_By.push({ email: userEmail, isLiked: true });
+            artifact.react += 1;
+          } else {
+            artifact.liked_By[userIndex].isLiked = true;
+          }
+          userLiked = true;
+        } else {
+
+          const userIndex = artifact.liked_By.findIndex(
+            (user) => user.email === userEmail
+          );
+          if (userIndex !== -1) {
+            artifact.liked_By[userIndex].isLiked = false;
+            artifact.react -= 1;
+          }
+          userLiked = false;
+        }
+
+        // Update the artifact in the collection
+        await aftifactCollection.updateOne(
+          { _id: new ObjectId(id) },
+          {
+            $set: {
+              liked_By: artifact.liked_By,
+              react: artifact.react,
+            },
+          }
+        );
+
+        // Send the updated response
+        res.status(200).json({
+          success: true,
+          message: "Artifact like updated successfully",
+          user: {
+            email: userEmail,
+            isLiked: userLiked,
+          },
+        });
+      } catch (err) {
+        console.error(err);
+        res.status(500).json({ success: false, message: "Server error" });
       }
     });
 
