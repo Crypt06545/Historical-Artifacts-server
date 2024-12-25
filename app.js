@@ -31,8 +31,8 @@ async function run() {
 
     // db collections
     const aftifactCollection = database.collection("NewArtifact");
-    const likedArtifactsCollection = database.collection("LikedArtifact");
     const CommentArtifact = database.collection("Comments");
+    const LikedArtifact = database.collection("LikedArtifact");
 
     // GET requests
 
@@ -78,7 +78,6 @@ async function run() {
 
     app.get("/my-add-artifact/:email", async (req, res) => {
       const email = req.params.email;
-      // console.log("Fetching artifacts for email:", email);
       try {
         const result = await aftifactCollection
           .find({ userInfo: email })
@@ -122,7 +121,25 @@ async function run() {
 
     app.get("/liked-artifacts/:email", async (req, res) => {
       const userEmail = req.params.email;
-      console.log(userEmail);
+
+      try {
+        // Query the LikedArtifact collection to find matching documents by userEmail
+        const result = await LikedArtifact.find({ userEmail }).toArray();
+
+        if (result.length > 0) {
+          // Send the artifactId of the matched documents
+          const artifactIds = result.map((item) => item.artifactId);
+          // res.json({ artifactIds });
+          res.send({artifactIds});
+        } else {
+          res
+            .status(404)
+            .json({ message: "No liked artifacts found for this email" });
+        }
+      } catch (err) {
+        console.error("Error fetching data:", err);
+        res.status(500).json({ message: "Server error" });
+      }
     });
 
     app.post("/comments/:id", async (req, res) => {
@@ -209,14 +226,12 @@ async function run() {
       const { userEmail, liked } = req.body;
 
       try {
-        // Validate the ID
         if (!ObjectId.isValid(id)) {
           return res
             .status(400)
             .json({ success: false, message: "Invalid ID" });
         }
 
-        // Find the artifact
         const artifact = await aftifactCollection.findOne({
           _id: new ObjectId(id),
         });
@@ -227,55 +242,69 @@ async function run() {
             .json({ success: false, message: "Artifact not found" });
         }
 
-        // Ensure liked_By is an array
+        // Ensure `liked_By` is an array and `react` is a non-negative number
         if (!Array.isArray(artifact.liked_By)) {
           artifact.liked_By = [];
         }
-        let userLiked = false;
-
-        if (liked) {
-          const userIndex = artifact.liked_By.findIndex(
-            (user) => user.email === userEmail
-          );
-
-          if (userIndex === -1) {
-            artifact.liked_By.push({ email: userEmail, isLiked: true });
-            artifact.react += 1;
-          } else {
-            artifact.liked_By[userIndex].isLiked = true;
-          }
-          userLiked = true;
-        } else {
-
-          const userIndex = artifact.liked_By.findIndex(
-            (user) => user.email === userEmail
-          );
-          if (userIndex !== -1) {
-            artifact.liked_By[userIndex].isLiked = false;
-            artifact.react -= 1;
-          }
-          userLiked = false;
+        if (typeof artifact.react !== "number" || artifact.react < 0) {
+          artifact.react = 0;
         }
 
-        // Update the artifact in the collection
-        await aftifactCollection.updateOne(
-          { _id: new ObjectId(id) },
-          {
-            $set: {
-              liked_By: artifact.liked_By,
-              react: artifact.react,
-            },
-          }
+        const userIndex = artifact.liked_By.findIndex(
+          (user) => user.email === userEmail
         );
 
-        // Send the updated response
+        // Case when the user likes the artifact
+        if (liked) {
+          if (userIndex === -1) {
+            artifact.liked_By.push({ email: userEmail, id });
+            artifact.react += 1; // Increment react count
+
+            await database.collection("LikedArtifact").insertOne({
+              artifactId: id,
+              userEmail: userEmail,
+            });
+          } else {
+            artifact.liked_By[userIndex].isLiked = true;
+            artifact.react += 1;
+            const existingLike = await database
+              .collection("LikedArtifact")
+              .findOne({
+                artifactId: id,
+                userEmail: userEmail,
+              });
+
+            if (!existingLike) {
+              await database.collection("LikedArtifact").insertOne({
+                artifactId: id,
+                userEmail: userEmail,
+              });
+            }
+          }
+        } else {
+          // Case when the user dislikes the artifact
+          if (userIndex !== -1) {
+            // User is removing their like
+            artifact.liked_By[userIndex].isLiked = false;
+            artifact.react -= 1;
+
+            // Remove from the 'LikedArtifact' collection
+            await database.collection("LikedArtifact").deleteOne({
+              artifactId: id,
+              userEmail: userEmail,
+            });
+          }
+        }
+
+        await aftifactCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: { liked_By: artifact.liked_By, react: artifact.react } }
+        );
+
         res.status(200).json({
           success: true,
-          message: "Artifact like updated successfully",
-          user: {
-            email: userEmail,
-            isLiked: userLiked,
-          },
+          message: `Artifact ${liked ? "liked" : "disliked"} successfully`,
+          react: artifact.react,
         });
       } catch (err) {
         console.error(err);
