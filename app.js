@@ -131,6 +131,13 @@ async function run() {
 
     app.get("/my-add-artifact/:email", verifyToken, async (req, res) => {
       const email = req.params.email;
+
+      const decodedEmail = req.user?.email;
+      // console.log('email from token-->', decodedEmail)
+      // console.log('email from params-->', email)
+      if (decodedEmail !== email)
+        return res.status(401).send({ message: "unauthorized access" });
+
       try {
         const result = await aftifactCollection
           .find({ userInfo: email })
@@ -174,7 +181,10 @@ async function run() {
 
     app.get("/liked-artifacts/:email", verifyToken, async (req, res) => {
       const userEmail = req.params.email;
-
+      console.log(userEmail);
+      const decodedEmail = req.user?.email;
+      if (decodedEmail !== userEmail)
+        return res.status(401).send({ message: "unauthorized access" });
       try {
         // Query the LikedArtifact collection to find matching documents by userEmail
         const result = await LikedArtifact.find({ userEmail }).toArray();
