@@ -48,7 +48,7 @@ const verifyToken = (req, res, next) => {
 
 async function run() {
   try {
-    await client.connect();
+    // await client.connect();
 
     // Create a database
     const database = client.db("ArtifactDB");
@@ -181,7 +181,7 @@ async function run() {
 
     app.get("/liked-artifacts/:email", verifyToken, async (req, res) => {
       const userEmail = req.params.email;
-      console.log(userEmail);
+      // console.log(userEmail);
       const decodedEmail = req.user?.email;
       if (decodedEmail !== userEmail)
         return res.status(401).send({ message: "unauthorized access" });
@@ -378,10 +378,10 @@ async function run() {
       }
     });
 
-    await client.db("admin").command({ ping: 1 });
-    console.log(
-      "Pinged your deployment. You successfully connected to MongoDB!"
-    );
+    // await client.db("admin").command({ ping: 1 });
+    // console.log(
+    //   "Pinged your deployment. You successfully connected to MongoDB!"
+    // );
   } finally {
     // Ensures that the client will close when you finish/error
   }
