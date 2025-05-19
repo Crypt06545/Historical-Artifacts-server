@@ -60,6 +60,11 @@ async function run() {
 
     // GET requests
 
+    // Hello route
+    app.get("/", (req, res) => {
+      res.send("hello");
+    });
+
     // generate jwt
     app.post("/jwt", async (req, res) => {
       const email = req.body;
@@ -87,11 +92,6 @@ async function run() {
           sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
         })
         .send({ success: true });
-    });
-
-    // Hello route
-    app.get("/", (req, res) => {
-      res.send("hello");
     });
 
     app.get("/all-artifacts", async (req, res) => {
@@ -156,7 +156,7 @@ async function run() {
     });
 
     app.get("/featured-artifacts", async (req, res) => {
-      const featuredArtifacts = aftifactCollection.find().limit(6);
+      const featuredArtifacts = aftifactCollection.find().limit(8);
       const result = await featuredArtifacts.toArray();
       res.json(result);
     });
